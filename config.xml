@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<config>
+    <modules>
+        <module category="Datenaustausch" context="14402_TapoCam" id="14402" name="TapoCam (14402)" version="00.02">
+            <inputs>
+			    <input type="string" const_name="host_ip" init_value="">Host IP</input>
+                <input type="string" const_name="pwd" init_value="">Password</input>
+                <input type="number" const_name="notifications_enabled" init_value="0">Notifications</input>
+            </inputs>
+            <outputs>
+				<output type="number" const_name="status" init_value="0">Status</output>
+            </outputs>               
+			<remanent_variables>
+            </remanent_variables>
+            <imports>
+				<import>libs/tapo_lib</import>
+            </imports>
+        </module>			
+    </modules>
+</config>
