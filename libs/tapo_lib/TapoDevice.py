@@ -418,6 +418,8 @@ class TapoDevice:
         :raises: Exception: Any exceptions raised by 'execute_function' or if the response structure is not
                             as expected.
         """
+        self.logger.debug("Entering set_notification_enabled({}, {})".format(notification_enabled,
+                                                                             rich_notification_enabled))
         params = {
             "msg_push": {
                 "chn1_msg_push_info": {
@@ -429,6 +431,8 @@ class TapoDevice:
         result = self.execute_function("setMsgPushConfig", params)
 
         # {"method":"controlChild","result":{"response_data":{"result":{"responses":[{"method":"setMsgPushConfig","error_code":-1805}
+        if result != {}:
+            self.logger.warning("In set_notification_enabled, result was <{}>".format(result))
         return result == {}
 
     def get_notification_enabled(self):
@@ -441,6 +445,7 @@ class TapoDevice:
 
         :raises: Exception: Any exceptions raised by 'perform_request' or if the response structure is not as expected.
         """
+        self.logger.debug("Entering get_notification_enabled()")
         params = {
             "method": "getMsgPushConfig",
             "params": {"msg_push": {"name": "chn1_msg_push_info"}}
