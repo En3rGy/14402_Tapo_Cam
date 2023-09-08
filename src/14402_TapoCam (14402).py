@@ -64,10 +64,12 @@ class TapoCam_14402_14402(hsl20_4.BaseModule):
         if index == self.PIN_I_NOTIFICATIONS_ENABLED:
             try:
                 if not self.tapo_device.set_notification_enabled(bool(value), False):
-                    raise BaseException("Error while setting notifications")
+                    raise BaseException("Received 'False' as return calling set_notification_enabled({},False)".format(
+                        bool(value)))
 
                 if self.tapo_device.get_notification_enabled() != bool(value):
-                    raise BaseException("Notification not set. Current value differs from commanded one.")
+                    raise BaseException("Notification not set. Current value differs from commanded one calling " +
+                                        "set_notification_enabled({},False)".format(bool(value)))
             except Exception as e:
                 self.DEBUG.add_exception(e)
 
