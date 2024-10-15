@@ -1,12 +1,5 @@
-# FeiertageFerien (14401)
-Das Logikmodul nutzt https://www.openholidaysapi.org, um festzustellen, ob es sich beim aktuellen Tag um einen Feiertag 
-oder um einen Tag der Schulferien handelt.
-
-Wir das Überprüfen eines Tages kommandiert und es sind *keine* Feiertage bekannt, werden zuerst die Feiertage für die 
-kommenden 356 Tage abgerufen.  
-
-**Achtung**: Fehler bei den Eingängen können *nicht* detektiert werden und führen zur Ausgabe "kein Feiertag / 
-Ferientag". 
+# Tapo Cam (14402)
+...
 
 ## Voraussetzungen
 HSL 2.0.4
@@ -16,33 +9,27 @@ Die .hslz Datei mit dem Gira Experte importieren. Das Logikmodul ist dann in der
 
 ## Eingänge
 
-| Nr. | Eingang                  | Initwert | Beschreibung                                                                                                                                                                                                                                                                                              |
-|-----|--------------------------|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1   | ISO-Code Land            | DE       | Länderkürzel gem. [https://openholidaysapi.org/Countries](https://openholidaysapi.org/Countries)                                                                                                                                                                                                          |
-| 2   | Code Verwaltungseinheit  | DE-BY    | Kürzel der Verwaltungseinheit gem. Länderkürzel gem. `https://openholidaysapi.org/Subdivisions?countryIsoCode={Ländercode}` <br>Z.B. für Deutschland mit `{Ländercode}` = DE:<br>[https://openholidaysapi.org/Subdivisions?countryIsoCode=DE](https://openholidaysapi.org/Subdivisions?countryIsoCode=DE) |
-| 3   | Mitternacht              | 0        | <ul><li>Der Baustein prüft den Feiertags- / Schulferienstatus des aktuellen Tages, wenn auf diesem Eingang eine 1 empfangen wird.</li><li>Veraltete Einträge werden gelöscht.</li><li>Wenn keine / 0 Einträge bekannt sind, werden die nächsten 356 Tage abgerufen und gespeichert.</li></ul>             |
-| 4   | Feiertage/Ferien abrufen | 0        | Der Baustein ruft die Feiertage und Ferien für die nächsten 365 Tage ab                                                                                                                                                                                                                                   |
+| Nr. | Eingang | Initwert | Beschreibung |
+|-----|---------|----------|--------------|
+| 1   |         |          |              |
 
 
 ## Ausgänge
 Alle Ausgänge sind Send-by-Change ausgeführt.
 
-| Nr. | Ausgang         | Initwert | Beschreibung                                                   |
-|-----|-----------------|----------|----------------------------------------------------------------|
-| 1   | Feiertag/Ferien | 0        | 1 wenn der aktuelle Tag ein Ferien- oder Feiertag ist, sonst 0 |
+| Nr. | Ausgang | Initwert | Beschreibung |
+|-----|---------|----------|--------------|
+| 1   |         |          |              |
 
 
 ## Sonstiges
 
 - Neuberechnung beim Start: Nein
 - Baustein ist remanent: Nein
-- Interne Bezeichnung: 14401
+- Interne Bezeichnung: 14402
 
 ### Change Log
 
-- v00.02: 
-  - Improved exception logging
-  - Fix: Renew stok 
 - v00.01: Initial
 
 ### Open Issues / Known Bugs
@@ -67,15 +54,12 @@ Der Code des Bausteins befindet sich in der hslz Datei oder auf [github](https:/
 
 ## Anforderungen
 
-- Der Baustein soll eine 1 ausgeben, wenn es ich bei dem aktuellen Tag, um einen Ferien- oder Feiertag handelt, andernfalls eine 0. 
+. 
 
 ## Software Design Description
 
-* Der Baustein fragt https://www.openholidaysapi.org nach dem Status des Tages ab.
-* Der Baustein führt selbst *keine* zyklische Abfrage durch. Hintergrund ist, dass die Abfrage möglichst um Mitternacht 
-erfolgen sollte. Überprüft der Baustein dies selbst wäre ein Timer mit einer z.B. Minütlichen Ausführung nötig. Das 
-erhöht die Komplexität und Rechenlast des HS, wenn auch nur minimal. Ein Trigger für den Tageswechsel ist oftmals 
-ohnehin vorhanden.  
+Refactoring von https://github.com/JurajNyiri/pytapo/blob/main/pytapo/__init__.py
+.
 
 ## Validierung und Verifikation
 

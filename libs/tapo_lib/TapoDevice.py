@@ -1,15 +1,18 @@
 import logging
 import hashlib
+import urllib
 import urllib2
 import ssl
 import json
 import datetime
 import time
+import os
 
 
 class TapoDevice:
     ERROR_CODES = {
         "-40401": "Invalid stok value",
+        "-40413": "?",
         "-40210": "Function not supported",
         "-64303": "Action cannot be done while camera is in patrol mode.",
         "-64324": "Privacy mode is ON, not able to execute",
@@ -22,6 +25,10 @@ class TapoDevice:
     }
 
     def __init__(self, host_ip, password, child_id=None):
+        self.user = str()
+        self.cnonce = str()
+        self.hashedSha256Password = None
+        self.is_secure_connection_cached = None
         self.time_correction = False
         self.logger = logging.getLogger(__name__)
         self.password = password
@@ -48,50 +55,281 @@ class TapoDevice:
                    "Content-Type": "application/json; charset=UTF-8"
                    }
 
-        request = urllib2.Request(url, data=json.dumps(data), headers=headers)
-        response = urllib2.urlopen(request, timeout=30, context=ctx)
+        try:
+            request = urllib2.Request(url, data=json.dumps(data), headers=headers)
+            response = urllib2.urlopen(request, timeout=30, context=ctx)
 
-        result = response.read()
-        ret_code = response.getcode()
-        json_result = json.loads(result)
-        self.logger.debug("In get_https_response, code {}, {}".format(ret_code, result))
+            result = response.read()
+            ret_code = response.getcode()
+            json_result = json.loads(result)
+            self.logger.debug("get_https_response | In get_https_response, code {}, {}".format(ret_code, result))
 
-        if ret_code == 200:
-            if json_result["error_code"] == 0:
-                return json_result
+            if ret_code == 200:
+                if json_result["error_code"] == 0 or json_result["error_code"] == -40413:
+                    return json_result
+                else:
+                    if "method" not in json_result:
+                        json_result["method"] = "?"
+
+                    error_str = "get_https_response | Received error {} ({}) " \
+                                "trying to run method '{}'".format(json_result["error_code"],
+                                                                   self.get_error_str(json_result["error_code"]),
+                                                                   data["method"])
+                    self.logger.error(error_str)
+                    raise Exception(error_str)
+
+            elif ret_code == 401:
+                try:
+                    if json_result["result"]["data"]["code"] == -40411:
+                        self.logger.error("Code is -40411, raising Exception.")
+                        raise Exception("Invalid authentication data")
+                except Exception as e:
+                    if str(e) == "Invalid authentication data":
+                        raise e
+                    else:
+                        pass
             else:
-                if "method" not in json_result:
-                    json_result["method"] = "?"
+                raise BaseException("Connecting to {} returns http code {}".format(url, ret_code))
 
-                error_str = "Received error {} ({}) trying to run method '{}'".format(json_result["error_code"],
-                                                                                      self.get_error_str(
-                                                                                          json_result["error_code"]),
-                                                                                      json_result["method"])
-                self.logger.error(error_str)
-                raise BaseException(error_str)
-        else:
-            raise BaseException("Connecting to {} returns http code {}".format(url, ret_code))
+        except urllib2.HTTPError as e:
+            self.logger.info("get_https_response | Code {}, '{}'".format(e.code, e.message))
+        except urllib2.URLError as e:
+            self.logger.info("get_https_response | {}".format(e.message))
 
     def get_host_name(self):
         return "https://{}/stok={}/ds".format(self.host, self.stok if self.stok else self.get_stok())
 
+    def is_secure_connection(self):
+        self.logger.debug("Entering is_secure_connection()")
+        if self.is_secure_connection_cached is None:
+            url = "https://{host}".format(host=self.host)
+            data = {
+                "method": "login",
+                "params": {
+                    "encrypt_type": "3",
+                    "username": "admin",
+                },
+            }
+
+            ctx = ssl._create_unverified_context()
+
+            headers = {"Host": self.host,
+                       "Referer": "https://{}".format(self.host),
+                       "Accept": "application/json",
+                       "Accept-Encoding": "gzip, deflate",
+                       "User-Agent": "Tapo CameraClient Android",
+                       "Connection": "close",
+                       "requestByApp": "true",
+                       "Content-Type": "application/json; charset=UTF-8"
+                       }
+
+            res = urllib2.Request(url, data=json.dumps(data), headers=headers)
+            res = urllib2.urlopen(res, timeout=30, context=ctx)
+            response = json.loads(res.read())
+
+            print("{}".format(response))
+
+            print()
+            self.is_secure_connection_cached = (
+                "error_code" in response
+                and response["error_code"] == -40413
+                and "result" in response
+                and "data" in response["result"]
+                and "encrypt_type" in response["result"]["data"]
+                and "3" in response["result"]["data"]["encrypt_type"]
+            )
+        return self.is_secure_connection_cached
+
+    def validate_device_confirm(self, nonce, device_confirm):
+        hashed_nonces_with_sha256 = (
+            hashlib.sha256(
+                self.cnonce.encode("utf8")
+                + self.hashedSha256Password.encode("utf8")
+                + nonce.encode("utf8")
+            )
+            .hexdigest()
+            .upper()
+        )
+        hashed_nonces_with_md5 = (
+            hashlib.md5(
+                self.cnonce.encode("utf8")
+                + self.hashedPassword.encode("utf8")
+                + nonce.encode("utf8")
+            )
+            .hexdigest()
+            .upper()
+        )
+        if device_confirm == (hashed_nonces_with_sha256 + nonce + self.cnonce):
+            password_encryption_method = "SHA256"
+        elif device_confirm == (hashed_nonces_with_md5 + nonce + self.cnonce):
+            password_encryption_method = "MD5"
+        else:
+            password_encryption_method = str()
+        return password_encryption_method is not None
+
+    def generate_nonce(self, length):
+        self.logger.debug("Entering generate_nonce({})".format(length))
+        return os.urandom(length).hex().encode()
+
+    def get_hashed_password(self):
+        return hashlib.md5(self.password.encode("utf8")).hexdigest().upper()
+
     def get_stok(self):
         self.logger.debug("Entering get_stok()")
-        hashed_password = hashlib.md5(self.password.encode("utf8")).hexdigest().upper()
 
-        url = "https://{}".format(self.host)
-        data = {"method": "login",
+        if self.is_secure_connection():
+            self.logger.debug("get_stok | Connection is secure.")
+            cnonce = self.generate_nonce(8).decode().upper()
+            data = {
+                "method": "login",
+                "params": {
+                    "cnonce": cnonce,
+                    "encrypt_type": "3",
+                    "username": self.user,
+                },
+            }
+        else:
+            self.logger.debug("get_stok | Connection is insecure.")
+            hashed_password = self.get_hashed_password()
+            data = {
+                "method": "login",
                 "params": {
                     "hashed": True,
                     "password": hashed_password,
-                    "username": "admin"
-                }}
+                    "username": "admin",
+                },
+            }
 
-        json_result = self.get_https_response(url, data)
+        url = f"https://{self.host}"
+
+        json_result = {}
+        try:
+            json_result = self.get_https_response(url, data)
+        except Exception as e:
+            self.logger.debug(f"get_stock | {e}")
+            raise e
+
+        if self.is_secure_connection():
+            self.logger.debug("get_stok | Processing secure response.")
+            if ("result" in json_result and "data" in json_result["result"]
+                    and "nonce" in json_result["result"]["data"] and "device_confirm" in json_result["result"]["data"]):
+                self.logger.debug("Validating device confirm.")
+                nonce = json_result["result"]["data"]["nonce"]
+                if self.validate_device_confirm(nonce, json_result["result"]["data"]["device_confirm"]):
+                    # sets self.passwordEncryptionMethod, password verified on client, now request stok
+                    self.logger.debug("get_stok | Signing in with digest_passwd.")
+                    digest_passwd = (
+                        hashlib.sha256(
+                            self.get_hashed_password().encode("utf8")
+                            + self.cnonce.encode("utf8")
+                            + nonce.encode("utf8")
+                        )
+                        .hexdigest()
+                        .upper()
+                    )
+                    data = {
+                        "method": "login",
+                        "params": {
+                            "cnonce": self.cnonce,
+                            "encrypt_type": "3",
+                            "digest_passwd": (
+                                digest_passwd.encode("utf8")
+                                + self.cnonce.encode("utf8")
+                                + nonce.encode("utf8")
+                            ).decode(),
+                            "username": self.user,
+                        },
+                    }
+                    res = urllib.request(
+                        "POST",
+                        url,
+                        data=json.dumps(data),
+                        headers=self.headers,
+                        verify=False,
+                    )
+                    response_data = res.json()
+                    if (
+                        "result" in response_data
+                        and "start_seq" in response_data["result"]
+                    ):
+                        if (
+                            "user_group" in response_data["result"]
+                            and response_data["result"]["user_group"] != "root"
+                        ):
+                            self.logger.debug("Incorrect user_group detected, raising Exception.")
+                            # encrypted control via 3rd party account does not seem to be supported
+                            # see https://github.com/JurajNyiri/HomeAssistant-Tapo-Control/issues/456
+                            raise Exception("get_stok | Invalid authentication data")
+                        self.logger.debug("get_stok | Geneerating encryption tokens.")
+                        self.lsk = self.generateEncryptionToken("lsk", nonce)
+                        self.ivb = self.generateEncryptionToken("ivb", nonce)
+                        self.seq = response_data["result"]["start_seq"]
+                    else:
+                        if (
+                            self.retryStok
+                            and (
+                                "error_code" in response_data
+                                and response_data["error_code"] == -40413
+                            )
+                            and loginRetryCount < MAX_LOGIN_RETRIES
+                        ):
+                            loginRetryCount += 1
+                            self.logger.debug(
+                                f"Incorrect device_confirm value, retrying: {loginRetryCount}/{MAX_LOGIN_RETRIES}."
+                            )
+                            return self.refreshStok(loginRetryCount)
+                        else:
+                            self.logger.debug("Incorrect device_confirm value, raising Exception.")
+                            raise Exception("Invalid authentication data")
+        else:
+            self.password_EncryptionMethod = "MD5"
+        if (
+            "result" in response_data
+            and "data" in response_data["result"]
+            and "time" in response_data["result"]["data"]
+            and "max_time" in response_data["result"]["data"]
+            and "sec_left" in response_data["result"]["data"]
+            and response_data["result"]["data"]["sec_left"] > 0
+        ):
+            raise Exception(
+                f"Temporary Suspension: Try again in {str(response_data['result']['data']['sec_left'])} seconds"
+            )
+        if (
+            "data" in response_data
+            and "code" in response_data["data"]
+            and "sec_left" in response_data["data"]
+            and response_data["data"]["code"] == -40404
+            and response_data["data"]["sec_left"] > 0
+        ):
+            raise Exception(
+                f"Temporary Suspension: Try again in {str(response_data['data']['sec_left'])} seconds"
+            )
+
+        if self.responseIsOK(res):
+            self.logger.debug("Saving stok.")
+            self.stok = res.json()["result"]["stok"]
+            return self.stok
+        if (
+            self.retryStok
+            and ("error_code" in response_data and response_data["error_code"] == -40413)
+            and loginRetryCount < MAX_LOGIN_RETRIES
+        ):
+            loginRetryCount += 1
+            self.logger.debug(
+                f"Unexpected response, retrying: {loginRetryCount}/{MAX_LOGIN_RETRIES}."
+            )
+            return self.refreshStok(loginRetryCount)
+        else:
+            self.logger.debug("Unexpected response, raising Exception.")
+            raise Exception("Invalid authentication data")
+
+
+
+        # todo: continue with https://github.com/JurajNyiri/pytapo/blob/5e7df7d0e05065d2f04990cb1db0a2cd75d13775/pytapo/__init__.py
 
         if len(json_result) > 0:
             self.stok = json_result["result"]["stok"]
-            self.logger.debug("self.stok = {}".format(self.stok))
+            self.logger.debug("get_stock | self.stok = {}".format(self.stok))
 
             return self.stok
         else:
@@ -390,9 +628,10 @@ class TapoDevice:
         if ret["error_code"] == 0:
             pass
         else:
-            error_str = "Received error {} ({}) trying to run method '{}'".format(ret["error_code"],
-                                                                                  self.get_error_str(ret["error_code"]),
-                                                                                  ret["method"])
+            error_str = "get_recordings | Received error {} ({}) " \
+                        "trying to run method '{}'".format(ret["error_code"],
+                                                           self.get_error_str(ret["error_code"]),
+                                                           ret["method"])
             self.logger.error(error_str)
             raise BaseException(error_str)
 

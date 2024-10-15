@@ -43,11 +43,13 @@ class TapoCam_14402_14402(hsl20_4.BaseModule):
 
     def init_tapo(self):
         self.logger.debug("Entering init_tapo()")
+        self.DEBUG.set_value("Child ID", self.child_id)
         self.tapo_device = TapoDevice.TapoDevice(self._get_input_value(self.PIN_I_HOST_IP),
                                                  self._get_input_value(self.PIN_I_PWD),
                                                  self.child_id)
 
         self.child_id = str(self.tapo_device.get_child_devices()[0])
+        self.DEBUG.set_value("Child IDs", self.tapo_device.get_child_devices())
         self.tapo_device.child_id = self.child_id
 
     def on_init(self):
